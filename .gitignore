@@ -1,0 +1,4 @@
+# created by virtualenv automatically
+/venv/
+/numpy_bitmap/
+.idea/
