@@ -6,47 +6,68 @@ from torch.utils.data import DataLoader, TensorDataset
 import torch.nn.functional as F
 import torch.nn as nn
 from sklearn.model_selection import train_test_split
+import time
+
+number_of_tests = 30
+execution_time_on_cpu = []
+execution_time_on_cuda = []
+# data variables
+number_of_classes = 2
+drop_data = 100000  # number of data to drop from each class
+
+# model parameters
+number_of_epochs = 1
+learning_rate = 0.01
+# number_of_layers = #number_of_hidden_layers
+# number_of_neurons = #number_of_neurons_in_each_hidden_layer
+
 
 if __name__ == '__main__':
-    # variables
-    number_of_classes = 8
-    var_device = "cuda"
-
-    all_data = np.zeros((0, 784), dtype=np.uint8)
-    labels = np.zeros(1, dtype=np.uint8)
+    compare_devices_test = "on"
+    counter = 0
+for device_test in range(number_of_tests):
+    print(device_test)
+    start_time = time.time()
+    
+    # which device to use
+    if device_test < number_of_tests/2:
+        var_device = "cpu"
+    else:
+        var_device = "cuda"
 
     # prepare doodle dataset
-    # for i in range (0, len(os.listdir("./numpy_bitmap"))):
-    j = 0
-    for i in range(number_of_classes):
-        c = np.load("./numpy_bitmap/" + os.listdir("./numpy_bitmap")[i], encoding='latin1', allow_pickle=True)
-        c = c / np.max(c)  # normalize data values from 0-255 to 0-1
+    all_data = np.zeros((0, 784), dtype=np.uint8)
+    labels = np.zeros(1, dtype=np.uint8)
+    # for i in range (0, len(os.listdir("./numpy_bitmap"))): # for all files
+    for k in range(number_of_classes):
+        c = np.load("./numpy_bitmap/" + os.listdir("./numpy_bitmap")[k], encoding='latin1', allow_pickle=True)
+        c = np.delete(c, np.s_[0:drop_data], 0)  # delete the first drop_data number of columns
+        c = c / np.max(c)  # normalize data to 0-1
         all_data = np.concatenate((all_data, c))
 
-    print("Total number of elements: " + str(all_data.shape))
+    print("Total number of elements: " + str(all_data.shape[0]))
     labels = np.resize(labels, all_data.shape[0])
     # prepare labels
     j = 0
-    for i in range(number_of_classes):
-        b = np.load("./numpy_bitmap/" + os.listdir("./numpy_bitmap")[i], encoding='latin1', allow_pickle=True)
-        for j in range(j, j + b.shape[0]):
-            labels[j] = i
+    for z in range(number_of_classes):
+        b = np.load("./numpy_bitmap/" + os.listdir("./numpy_bitmap")[z], encoding='latin1', allow_pickle=True)
+        for j in range(j, j + b.shape[0] - drop_data):
+            labels[j] = z
 
     # split data using scikit-learn for train and test
     partitions = [0.8, 0.2]
     train_obraz, test_obraz, train_label, test_label = train_test_split(all_data, labels, train_size=partitions[0],
                                                                         random_state=45)
-
     '''
     # plot some images from the dataset
     fig, axs = plt.subplots(3, 4, figsize=(10, 6))
-    #loop over the plots
+    # loop over the plots
     for ax in axs.flatten():
         # pick a random image
         randimg2show = np.random.randint(0, len(train_obraz))
         train_obraz = np.reshape(train_obraz, (train_obraz.shape[0], train_obraz.shape[1]))
 
-        # create the image (must be reshaped!)
+        # create the image (must be reshaped from (x,784))
         img = np.reshape(train_obraz[randimg2show], (28, 28))
         ax.imshow(img, cmap='gray')
 
@@ -57,15 +78,14 @@ if __name__ == '__main__':
     plt.tight_layout(rect=[0, 0, 1, .95])
     plt.show()
     '''
-
     '''
     # plot
     fix, axs = plt.subplots(3,4,figsize=(10,6))
     plt.suptitle('Ttes', fontsize=20)
     for ax in axs.flatten():
-        randimg2show = np.random.randint(0, len(all_data))
-        ax.plot(all_data[randimg2show,:],'ko')
-        ax.set_title(all_data[randimg2show][0][0])
+        randimg2show = np.random.randint(0, len(train_obraz))
+        ax.plot(train_obraz[randimg2show,:],'ko')
+        ax.set_title(train_label[randimg2show])
         ax.grid()
     plt.show()
     '''
@@ -89,25 +109,25 @@ if __name__ == '__main__':
     '''
 
     if var_device == "cuda":
-        # wrzucam dane do cuda
+        # add data to gpu
         train_obraz = torch.tensor(train_obraz).float().cuda()
         train_label = torch.tensor(train_label).long().cuda()
 
         test_obraz = torch.tensor(test_obraz).float().cuda()
         test_label = torch.tensor(test_label).long().cuda()
     else:
-        # wrzucam dane do cpu
+        # add data to cpu
         train_obraz = torch.tensor(train_obraz).float()
         train_label = torch.tensor(train_label).long()
 
         test_obraz = torch.tensor(test_obraz).float()
         test_label = torch.tensor(test_label).long()
 
-    # wrzucam dane do pytorch datasets
+    # pytorch datasets
     train_data = TensorDataset(train_obraz, train_label)
     test_data = TensorDataset(test_obraz, test_label)
 
-    # translacja danych do dataloader objects
+    # dataloader objects
     batchsize = 32
     train_loader = torch.utils.data.DataLoader(train_data, batch_size=batchsize, shuffle=True, drop_last=True)
     test_loader = torch.utils.data.DataLoader(test_data, batch_size=len(test_label))
@@ -121,14 +141,14 @@ if __name__ == '__main__':
                 super().__init__()
 
                 # input layer
-                self.input = nn.Linear(784, 64, device=var_device)
+                self.input = nn.Linear(784, 250, device=var_device)
 
                 # hidden layer
-                self.fc1 = nn.Linear(64, 32, device=var_device)
-                self.fc2 = nn.Linear(32, 32, device=var_device)
+                self.fc1 = nn.Linear(250, 200, device=var_device)
+                self.fc2 = nn.Linear(200, 50, device=var_device)
 
                 # output layer
-                self.output = nn.Linear(32, number_of_classes, device=var_device)
+                self.output = nn.Linear(50, number_of_classes, device=var_device)
 
             # forward pass
             def forward(self, x):
@@ -137,13 +157,16 @@ if __name__ == '__main__':
                 x = F.relu(self.fc2(x))
                 return torch.log_softmax(self.output(x), dim=1)
 
-        net = MNISTNet().cuda()
-        # net = MNISTNet()
-        lossfun = nn.NLLLoss().cuda()
-        # lossfun = nn.NLLLoss()
+        if var_device == "cuda":
+            net = MNISTNet().cuda()
+            lossfun = nn.NLLLoss().cuda()
+
+        if var_device == "cpu":
+            net = MNISTNet()
+            lossfun = nn.NLLLoss()
 
         # TODO SGD to adm test it
-        optimizer = torch.optim.SGD(net.parameters(), lr=0.01)
+        optimizer = torch.optim.SGD(net.parameters(), lr=learning_rate)
 
         return net, lossfun, optimizer
 
@@ -162,7 +185,7 @@ if __name__ == '__main__':
     #  train the model
     def function2trainTheModel():
         # number of epochs
-        epochs = 1
+        epochs = number_of_epochs
 
         # create the model
         net, lossfun, optimizer = create_the_MNISTNet()
@@ -219,12 +242,20 @@ if __name__ == '__main__':
 
     X, y = next(iter(test_loader))
     predictions = net(X).detach()
-    predictions = torch.Tensor(predictions).to('cpu')
-    fig, ax = plt.subplots(1, 2, figsize=(16, 5))
 
+    end_time = time.time()
+    print("--- %s seconds ---" % (end_time - start_time))
+    if var_device == "cpu":
+        execution_time_on_cpu = np.append(execution_time_on_cpu, (end_time - start_time))
+    if var_device == "cuda":
+        execution_time_on_cuda = np.append(execution_time_on_cuda, (end_time - start_time))
+
+    predictions = torch.Tensor(predictions).to('cpu')
     trainAcc = torch.Tensor(trainAcc).to('cpu')
     testAcc = torch.Tensor(testAcc).to('cpu')
 
+    '''
+    fig, ax = plt.subplots(1, 2, figsize=(16, 5))
     ax[0].plot(losses)
     ax[0].set_xlabel('Epochs')
     ax[0].set_ylabel('Loss')
@@ -238,7 +269,9 @@ if __name__ == '__main__':
     ax[1].set_title(f'Final model test accuracy: {testAcc[-1]:.2f}%')
     ax[1].legend()
     plt.show()
+    '''
 
+    '''
     # show the predictions
     numberofSamples = 1
     plt.bar(range(number_of_classes), (torch.exp(predictions[numberofSamples])))
@@ -249,7 +282,9 @@ if __name__ == '__main__':
     plt.show()
 
     test_obraz = torch.Tensor(test_obraz).to('cpu')
+    '''
 
+    '''
     fig, axs = plt.subplots(3, 4, figsize=(10, 6))
     for ax in axs.flatten():
         randimg2show = np.random.randint(0, len(test_obraz))
@@ -265,10 +300,24 @@ if __name__ == '__main__':
     plt.suptitle('Test', fontsize=20)
     plt.tight_layout(rect=[0, 0, 1, .95])
     plt.show()
+    '''
 
+    '''
     errors = 0
     for i in range(len(predictions)):
         if test_label[i] != torch.argmax(predictions[i]):
             errors += 1
 
     print("Errors: ", errors / len(predictions) * 100)
+    '''
+
+# plot time of execution on cpu and cuda
+plt.xlim([1, 12])
+plt.ylim([1, 12])
+x1 = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]
+plt.ylabel("Time (s)")
+plt.xlabel("Test number")
+plt.plot(x1, execution_time_on_cpu, label='CUDA')
+plt.plot(x1, execution_time_on_cuda, label='CPU')
+plt.legend()
+plt.show()
