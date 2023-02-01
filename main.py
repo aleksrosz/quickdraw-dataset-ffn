@@ -8,33 +8,41 @@ import torch.nn as nn
 from sklearn.model_selection import train_test_split
 import time
 
-number_of_tests = 30
+number_of_tests = 7
+
+# stats
 execution_time_on_cpu = []
 execution_time_on_cuda = []
+accuracy = []
+
 # data variables
-number_of_classes = 2
+number_of_classes = 40
 drop_data = 100000  # number of data to drop from each class
 
 # model parameters
-number_of_epochs = 1
+number_of_epochs = 8
 learning_rate = 0.01
-# number_of_layers = #number_of_hidden_layers
-# number_of_neurons = #number_of_neurons_in_each_hidden_layer
-
+number_of_layers_list = [1, 3, 6, 6, 6, 6, 9]  # number_of_hidden_layers
+number_of_neurons_list = [100, 200, 250, 300, 400, 500,250]  # number_of_neurons_in_each_hidden_layer
 
 if __name__ == '__main__':
     compare_devices_test = "on"
     counter = 0
 for device_test in range(number_of_tests):
-    print(device_test)
+    print("Test number: " + str(device_test))
     start_time = time.time()
-    
+
+    # model configuration #TODO
+    number_of_layers = number_of_layers_list[device_test]
+    number_of_neurons = number_of_layers_list[device_test]
+
     # which device to use
-    if device_test < number_of_tests/2:
+    if device_test < number_of_tests / 2:
         var_device = "cpu"
     else:
         var_device = "cuda"
 
+    var_device = "cpu"
     # prepare doodle dataset
     all_data = np.zeros((0, 784), dtype=np.uint8)
     labels = np.zeros(1, dtype=np.uint8)
@@ -91,7 +99,7 @@ for device_test in range(number_of_tests):
     '''
 
     '''
-    # plot wartości pikseli
+    # plot piksel intensity histogram
     fig, ax = plt.subplots(1, 2, figsize=(10, 4))
     ax[0].hist(all_data.flatten(), 50)
     ax[0].set_xlabel('Pixel intensity values')
@@ -134,35 +142,45 @@ for device_test in range(number_of_tests):
 
 
     # create a class for the model
-    def create_the_MNISTNet():
-
+    def create_the_MNISTNet(number_of_layers, number_of_neurons):
         class MNISTNet(nn.Module):
-            def __init__(self):
+            def __init__(self, number_of_layers, number_of_neurons):
                 super().__init__()
+                self.hidden_layers = nn.ModuleDict()
+                self.number_of_layers = number_of_layers
 
                 # input layer
-                self.input = nn.Linear(784, 250, device=var_device)
+                self.input = nn.Linear(784, number_of_neurons, device=var_device)
 
                 # hidden layer
-                self.fc1 = nn.Linear(250, 200, device=var_device)
-                self.fc2 = nn.Linear(200, 50, device=var_device)
-
+                for i in range(number_of_layers):
+                    self.hidden_layers[f'hidden{i}'] = nn.Linear(number_of_neurons, number_of_neurons,
+                                                                 device=var_device)
+                self.fc1 = nn.Linear(number_of_neurons, number_of_neurons, device=var_device)
                 # output layer
-                self.output = nn.Linear(50, number_of_classes, device=var_device)
+                self.output = nn.Linear(number_of_neurons, number_of_classes, device=var_device)
 
             # forward pass
             def forward(self, x):
+                # input layer
                 x = F.relu(self.input(x))
+
+                # hidden layer
+                for z in range(number_of_layers):
+                    x = F.relu(self.hidden_layers[f'hidden{z}'](x))
                 x = F.relu(self.fc1(x))
-                x = F.relu(self.fc2(x))
-                return torch.log_softmax(self.output(x), dim=1)
+
+                # output layer
+                x = torch.log_softmax(self.output(x), dim=1)
+
+                return x
 
         if var_device == "cuda":
-            net = MNISTNet().cuda()
+            net = MNISTNet(number_of_layers, number_of_neurons).cuda()
             lossfun = nn.NLLLoss().cuda()
 
         if var_device == "cpu":
-            net = MNISTNet()
+            net = MNISTNet(number_of_layers, number_of_neurons)
             lossfun = nn.NLLLoss()
 
         # TODO SGD to adm test it
@@ -172,15 +190,16 @@ for device_test in range(number_of_tests):
 
 
     # test model with one batch
-    net, lossfun, optimizer = create_the_MNISTNet()
+    net, lossfun, optimizer = create_the_MNISTNet(number_of_layers, number_of_neurons)
     dataiter = iter(train_loader)
     X, y = dataiter.__next__()
     yHat = net(X)
 
     # loss
     loss = lossfun(yHat, y)
-    print("Loss: ", loss.item())
 
+
+    # print("Loss: ", loss.item())
 
     #  train the model
     def function2trainTheModel():
@@ -188,7 +207,7 @@ for device_test in range(number_of_tests):
         epochs = number_of_epochs
 
         # create the model
-        net, lossfun, optimizer = create_the_MNISTNet()
+        net, lossfun, optimizer = create_the_MNISTNet(number_of_layers, number_of_neurons)
 
         # initialize the loss
         losses = torch.zeros(epochs)
@@ -302,22 +321,28 @@ for device_test in range(number_of_tests):
     plt.show()
     '''
 
-    '''
     errors = 0
     for i in range(len(predictions)):
         if test_label[i] != torch.argmax(predictions[i]):
             errors += 1
 
     print("Errors: ", errors / len(predictions) * 100)
-    '''
+    accuracy = np.append(accuracy, errors / len(predictions) * 100)
 
 # plot time of execution on cpu and cuda
-plt.xlim([1, 12])
-plt.ylim([1, 12])
-x1 = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]
+plt.autoscale(enable=True, axis='both', tight=True)
+x1 = list(range(1, number_of_tests + 1))
 plt.ylabel("Time (s)")
 plt.xlabel("Test number")
-plt.plot(x1, execution_time_on_cpu, label='CUDA')
-plt.plot(x1, execution_time_on_cuda, label='CPU')
+# plt.plot(x1, execution_time_on_cuda, label='CUDA')
+plt.plot(x1, execution_time_on_cpu, label='CPU')
+plt.legend()
+plt.show()
+
+# plot accuracy
+plt.autoscale(enable=True, axis='both', tight=True)
+plt.ylabel("Accuracy")
+plt.xlabel("Test number")
+plt.plot(x1, accuracy, label='errors %')
 plt.legend()
 plt.show()
